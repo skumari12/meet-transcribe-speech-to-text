@@ -1,3 +1,4 @@
 flask
 openai-whisper
-torch
+torch --index-url https://download.pytorch.org/whl/cpu
+gunicorn
