@@ -1,11 +1,13 @@
 from flask import Flask, render_template, request, send_file
 import os
 from openai import OpenAI
-from dotenv import load_dotenv
 
-# Load API key
-load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Ensure API key exists
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise ValueError("❌ OPENAI_API_KEY not set")
+
+client = OpenAI(api_key=api_key)
 
 app = Flask(__name__)
 
@@ -24,20 +26,21 @@ def index():
     transcript = ""
 
     if request.method == "POST":
-        file = request.files.get("file")
-
-        if not file or file.filename == "":
-            return render_template("index.html", transcript="⚠️ No file uploaded")
-
-        filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(filepath)
-
         try:
-            # 🔥 API CALL (NO LOCAL MODEL)
-            with open(filepath, "rb") as audio_file:
+            file = request.files.get("file")
+
+            if not file or file.filename == "":
+                return render_template("index.html", transcript="⚠️ Please upload a valid file")
+
+            # Save file safely
+            filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+            file.save(filepath)
+
+            # Call API
+            with open(filepath, "rb") as audio:
                 response = client.audio.transcriptions.create(
                     model="gpt-4o-transcribe",
-                    file=audio_file
+                    file=audio
                 )
 
             transcript = response.text
@@ -48,10 +51,11 @@ def index():
                 f.write(transcript)
 
         except Exception as e:
-            transcript = f"❌ Error: {str(e)}"
+            transcript = f"❌ ERROR: {str(e)}"
 
         finally:
-            if os.path.exists(filepath):
+            # Always delete uploaded file
+            if 'filepath' in locals() and os.path.exists(filepath):
                 os.remove(filepath)
 
     return render_template("index.html", transcript=transcript)
@@ -59,10 +63,13 @@ def index():
 
 @app.route("/download")
 def download():
-    path = os.path.join(OUTPUT_FOLDER, "transcript.txt")
-    if os.path.exists(path):
-        return send_file(path, as_attachment=True)
-    return "⚠️ No transcript available"
+    try:
+        path = os.path.join(OUTPUT_FOLDER, "transcript.txt")
+        if os.path.exists(path):
+            return send_file(path, as_attachment=True)
+        return "⚠️ No transcript available"
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 
 if __name__ == "__main__":
