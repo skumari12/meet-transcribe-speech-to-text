@@ -14,7 +14,7 @@ st.title("🎤 Meet Transcribe (Live)")
 # Load model
 @st.cache_resource
 def load_model():
-    return whisper.load_model("base")
+    return whisper.load_model("tiny")
 
 model = load_model()
 
