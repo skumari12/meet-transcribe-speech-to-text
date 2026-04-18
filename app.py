@@ -1,56 +1,43 @@
-import streamlit as st
+from flask import Flask, render_template, request, send_file
 import whisper
 import os
-import tempfile
-from transformers import pipeline
 
-# Fix for ffmpeg
-os.environ["PATH"] += os.pathsep + "ffmpeg"
+app = Flask(__name__)
 
-st.set_page_config(page_title="Meet Transcribe", layout="centered")
+UPLOAD_FOLDER = "uploads"
+OUTPUT_FOLDER = "output"
 
-st.title("🎤 Meet Transcribe (Live)")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# Load model
-@st.cache_resource
-def load_model():
-    return whisper.load_model("tiny")
+model = whisper.load_model("base")  # small/medium for better accuracy
 
-model = load_model()
+@app.route("/", methods=["GET", "POST"])
+def index():
+    transcript = ""
 
-# Load summarizer
-@st.cache_resource
-def load_summary():
-    return pipeline("summarization")
+    if request.method == "POST":
+        file = request.files["file"]
 
-summarizer = load_summary()
+        if file:
+            filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+            file.save(filepath)
 
-# Upload
-uploaded_file = st.file_uploader("Upload Audio", type=["wav", "mp3", "m4a"])
+            result = model.transcribe(filepath)
+            transcript = result["text"]
 
-if uploaded_file:
-    st.audio(uploaded_file)
+            # Save output
+            output_path = os.path.join(OUTPUT_FOLDER, "transcript.txt")
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(transcript)
 
-    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-        tmp.write(uploaded_file.read())
-        path = tmp.name
+    return render_template("index.html", transcript=transcript)
 
-    # Transcription
-    with st.spinner("Transcribing..."):
-        result = model.transcribe(path)
-        text = result["text"]
 
-    st.subheader("📝 Transcription")
-    st.write(text)
+@app.route("/download")
+def download():
+    return send_file("output/transcript.txt", as_attachment=True)
 
-    # Summary
-    with st.spinner("Generating Summary..."):
-        summary = summarizer(text, max_length=100, min_length=30, do_sample=False)[0]["summary_text"]
 
-    st.subheader("📌 Summary")
-    st.write(summary)
-
-    # Download
-    st.download_button("Download Text", text, file_name="output.txt")
-
-    os.remove(path)
+if __name__ == "__main__":
+    app.run(debug=True)
