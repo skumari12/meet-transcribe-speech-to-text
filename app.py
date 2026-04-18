@@ -1,6 +1,3 @@
-import os
-os.environ["PATH"] += os.pathsep + "ffmpeg"
-
 import streamlit as st
 import whisper
 import tempfile
